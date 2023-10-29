@@ -1,6 +1,8 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.covariance import empirical_covariance
 from sklearn. preprocessing import normalize
+from sklearn.feature_selection import mutual_info_regression
+
 import numpy as np
 
 EPS = 1e-20
@@ -70,6 +72,25 @@ if __name__ == '__main__':
         [7, 29, -7]
     ])
     x_set = normalize(x_set, axis= 0 , norm='l1')
+    # x_test_set = np.array([
+    #     [2, 1],
+    #     [2, 1],
+    #     [2, 1],
+    #     [2, 1],
+    #     [2, 1],
+    #     [1, 2],
+    #     [1, 2],
+    #     [1, 2],
+    #     [1, 2],
+    #     [1, 2],
+    #     [10, 3],
+    #     [11, 3],
+    #     [9, 3],
+    #     [11, 3],
+    #     [11, 3]
+    # ])
+    #print(mutual_info_regression(x_test_set[:,0].reshape(-1,1), x_test_set[:,1]),n_neighbors=5)
+    #print(x_test_set[:,1])
     feat_gen = FeatureGenerationTransformer()
     print(feat_gen.fit_transform(x_set).shape)
-    #print(feat_gen.fit_transform(x_set))
+    print(feat_gen.fit_transform(x_set))
