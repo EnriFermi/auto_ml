@@ -4,7 +4,7 @@ from sklearn. preprocessing import normalize
 import numpy as np
 
 EPS = 1e-20
-THRESHOLD = 0.3
+THRESHOLD = 0.2
 
 class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):
@@ -23,6 +23,8 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     def standard_generation(self, x_set, count_features):
         x_set = np.append(x_set, np.exp(x_set[:,:count_features]), axis=1)
         x_set = np.append(x_set, np.log(x_set[:,:count_features] + 1), axis=1)
+        x_set = np.append(x_set, np.power(x_set[:,:count_features], 2), axis=1)
+        x_set = np.append(x_set, np.power(x_set[:,:count_features], 0.5), axis=1)
 
         self.corr_mat = self.correlation_create(x_set)
 
@@ -69,5 +71,5 @@ if __name__ == '__main__':
     ])
     x_set = normalize(x_set, axis= 0 , norm='l1')
     feat_gen = FeatureGenerationTransformer()
-    print(feat_gen.fit_transform(x_set))
+    print(feat_gen.fit_transform(x_set).shape)
     #print(feat_gen.fit_transform(x_set))
