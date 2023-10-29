@@ -10,24 +10,40 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):
         pass
 
+    def correlation_create(self, x_set):
+        cov_mat = empirical_covariance(x_set)
+        std_arr = np.std(x_set, axis=0).reshape((1,-1))
+        std_mat = std_arr.T @ std_arr
+        return cov_mat / (std_mat + EPS)
+
     def fit(self, x_set, y_set=None):
-        self.cov_mat = empirical_covariance(x_set)
-        self.std_arr = np.std(x_set, axis=0).reshape((1,-1))
-        self.std_mat = self.std_arr.T @ self.std_arr
-        self.corr_mat = self.cov_mat / (self.std_mat + EPS)
+        self.corr_mat = self.correlation_create(x_set)
         return self
 
-    def covariance_generation(self, x_set):
+    def standard_generation(self, x_set, count_features):
+        x_set = np.append(x_set, np.exp(x_set[:,:count_features]), axis=1)
+        x_set = np.append(x_set, np.log(x_set[:,:count_features] + 1), axis=1)
+
+        self.corr_mat = self.correlation_create(x_set)
+
+        return x_set
+
+    def correlation_generation(self, x_set):
         for feat_1_ind in range(self.corr_mat.shape[0]):
             for feat_2_ind in range(feat_1_ind, self.corr_mat[feat_1_ind].shape[0]):
                 if abs(self.corr_mat[feat_1_ind][feat_2_ind]) < THRESHOLD:
                     x_set = np.append(x_set, (x_set[:,feat_1_ind] + x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
                     x_set = np.append(x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
                     x_set = np.append(x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
+        
+        self.corr_mat = self.correlation_create(x_set)
+
         return x_set
 
     def transform(self, x_set):
-        x_set = self.covariance_generation(self, x_set)
+        x_set = self.standard_generation(x_set, x_set.shape[1])
+        x_set = self.correlation_generation(x_set)
+
         return x_set
 
 
@@ -51,6 +67,7 @@ if __name__ == '__main__':
         [7, 28, -7],
         [7, 29, -7]
     ])
-    #x_set = normalize(x_set, axis= 0 , norm='l1')
+    x_set = normalize(x_set, axis= 0 , norm='l1')
     feat_gen = FeatureGenerationTransformer()
     print(feat_gen.fit_transform(x_set))
+    #print(feat_gen.fit_transform(x_set))
