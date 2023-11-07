@@ -1,29 +1,38 @@
+from numpy import ndarray
 from sklearn.datasets import load_breast_cancer
 from IPython.display import display 
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.base import BaseEstimator, TransformerMixin
 import numpy as np
 import pandas as pd
 
 
-class Encoder:
-    def __init__(self, enc_type):
-        self.enc_type = enc_type
-        self.encode_functions = {'one_hot': self._one_hot_enc}
-        self.category_rate = 0.2
+class Encoder(BaseEstimator, TransformerMixin):
+    def __init__(self, categ_rate=0.2):
+        self.encoders = {'one_hot': OneHotEncoder}
+        self.category_rate = categ_rate
+        self.categ_features_inds = None
+        self.encoder = None
 
-    def encode(self, data):
-        encoded_data = None
-        if self.enc_type in self.encode_functions.keys():
-            encoded_data = self.encode_functions[self.enc_type](data)
+    def fit(self, X, y=None, **fit_params):
+        self.categ_features_inds = self._get_categorical_inds(X)
+        if "enc_type" in fit_params.keys():
+            self.encoder = self.encoders[fit_params["enc_type"]]()
         
-        return encoded_data
+        del fit_params["enc_type"]
 
-    def _encode(self, data, features_inds, enc):
-        for item in features_inds:
-            encoded = enc.fit_transform(data[:, item].reshape(-1, 1)).toarray()
-            data = np.delete(data, item, 1) 
-            data = np.concatenate((data, encoded), axis=1)
-        return data
+        if self.encoder is not None:
+            self.encoder = self.encoder.fit(X[:, self.categ_features_inds], y, **fit_params)
+        return self
+    
+    def transform(self, X):
+        if self.encoder is None:
+            return X
+
+        encoded = self.encoder.transform(X[:, self.categ_features_inds]).toarray()
+        X = np.delete(X, self.categ_features_inds, 1)
+        X = np.concatenate((X, encoded), axis=1)
+        return X
 
     def _get_categorical_inds(self, data):
         categorical_features = list()
@@ -31,12 +40,7 @@ class Encoder:
         for num, col in enumerate(data.T):
             if np.unique(col).shape[0] < data.shape[0] * self.category_rate:
                 categorical_features.append(num)
-        return categorical_features
-
-    def _one_hot_enc(self, data):
-        enc = OneHotEncoder()
-        categorical_features = self._get_categorical_inds(data)
-        return self._encode(data, categorical_features, enc)
+        return categorical_features     
 
 
 def main():
@@ -47,8 +51,8 @@ def main():
     for i in range(x.shape[0]):
         x[i] = np.array(list(map(int, x[i]))) # Example dataset, turn real features into categories
 
-    enc = Encoder("one_hot")
-    result = enc.encode(x)
+    enc = Encoder()
+    result = enc.fit_transform(x, enc_type="one_hot")
     print(pd.DataFrame(result, dtype='float32').head())
 
 
