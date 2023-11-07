@@ -44,9 +44,9 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         for feat_1_ind in range(self.corr_mat.shape[0]):
             for feat_2_ind in range(feat_1_ind, self.corr_mat[feat_1_ind].shape[0]):
                 if abs(self.corr_mat[feat_1_ind][feat_2_ind]) < THRESHOLD:
-                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] + x_set[:,feat_2_ind]).reshape(-1,1)])
-                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1)])
-                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1)])
+                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] + x_set[:,feat_2_ind]).reshape(-1,1)], axis=1)
+                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1)], axis=1)
+                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1)], axis=1)
 
         return x_set
 
