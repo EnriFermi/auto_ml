@@ -23,12 +23,16 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         self.corr_mat = self.correlation_create(x_set)
         return self
 
-    def standard_generation(self, x_set, count_features):
-        x_time_set = x_set[:,:count_features] 
+    def standard_generation(self, x_set, count_features): 
         x_set = np.append(x_set, np.exp(x_set[:,:count_features]), axis=1)
+
+        x_time_set = x_set[:,:count_features]
         x_time_set[x_time_set < -1] = -1 + EPS_LOG
         x_set = np.append(x_set, np.log(x_time_set + 1), axis=1)
+
         x_set = np.append(x_set, np.power(x_set[:,:count_features], 2), axis=1)
+        x_set = np.append(x_set, np.power(x_set[:,:count_features], 3), axis=1)
+
         x_time_set = x_set[:,:count_features]
         x_time_set[x_time_set < 0] = -np.power(-x_time_set[x_time_set < 0], 0.5)
         x_time_set[x_time_set >= 0] = np.power(x_time_set[x_time_set >= 0], 0.5)
@@ -40,9 +44,9 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         for feat_1_ind in range(self.corr_mat.shape[0]):
             for feat_2_ind in range(feat_1_ind, self.corr_mat[feat_1_ind].shape[0]):
                 if abs(self.corr_mat[feat_1_ind][feat_2_ind]) < THRESHOLD:
-                    x_set = np.append(x_set, (x_set[:,feat_1_ind] + x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
-                    x_set = np.append(x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
-                    x_set = np.append(x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
+                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] + x_set[:,feat_2_ind]).reshape(-1,1)])
+                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1)])
+                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1)])
 
         return x_set
 
