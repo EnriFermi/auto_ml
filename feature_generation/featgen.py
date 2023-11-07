@@ -23,12 +23,15 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def standard_generation(self, x_set, count_features):
+        x_time_set = x_set[:,:count_features] 
         x_set = np.append(x_set, np.exp(x_set[:,:count_features]), axis=1)
         x_set = np.append(x_set, np.log(x_set[:,:count_features] + 1), axis=1)
         x_set = np.append(x_set, np.power(x_set[:,:count_features], 2), axis=1)
-        x_set = np.append(x_set, np.power(x_set[:,:count_features], 0.5), axis=1)
+        x_time_set[x_time_set < 0] = -np.power(x_time_set[x_time_set < 0], 0.5)
+        x_time_set[x_time_set >= 0] = np.power(x_time_set[x_time_set >= 0], 0.5)
+        x_set = np.append(x_set, x_time_set, axis=1)
 
-        self.corr_mat = self.correlation_create(x_set)
+        #self.corr_mat = self.correlation_create(x_set)
 
         return x_set
 
@@ -40,7 +43,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
                     x_set = np.append(x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
                     x_set = np.append(x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1), axis=1)
         
-        self.corr_mat = self.correlation_create(x_set)
+        #self.corr_mat = self.correlation_create(x_set)
 
         return x_set
 
