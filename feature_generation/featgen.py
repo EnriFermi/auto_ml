@@ -6,6 +6,7 @@ from sklearn.feature_selection import mutual_info_regression
 import numpy as np
 
 EPS = 1e-20
+EPS_LOG = 1e-3
 THRESHOLD = 0.2
 
 class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
@@ -25,7 +26,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     def standard_generation(self, x_set, count_features):
         x_time_set = x_set[:,:count_features] 
         x_set = np.append(x_set, np.exp(x_set[:,:count_features]), axis=1)
-        x_time_set[x_time_set < -1] = -1 + EPS
+        x_time_set[x_time_set < -1] = -1 + EPS_LOG
         x_set = np.append(x_set, np.log(x_time_set + 1), axis=1)
         x_set = np.append(x_set, np.power(x_set[:,:count_features], 2), axis=1)
         x_time_set = x_set[:,:count_features]
