@@ -2,6 +2,14 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.covariance import empirical_covariance
 from sklearn. preprocessing import normalize
 from sklearn.feature_selection import mutual_info_regression
+from sklearn.preprocessing import StandardScaler
+from tqdm.notebook import tqdm
+import pandas as pd
+
+
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+import time
 
 import numpy as np
 
@@ -10,93 +18,90 @@ EPS_LOG = 1e-3
 THRESHOLD = 0.2
 
 class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self):
-        pass
-
-    def correlation_create(self, x_set):
+    def __init__(self, thr=THRESHOLD, features_mask=None):
+        self.thr = thr
+        self._features_mask = features_mask
+    
+    #Construction of a matrix of correlation coefficients of features
+    def _correlation_create(self, x_set):
         cov_mat = empirical_covariance(x_set)
         std_arr = np.std(x_set, axis=0).reshape((1,-1))
         std_mat = std_arr.T @ std_arr
         return cov_mat / (std_mat + EPS)
 
     def fit(self, x_set, y_set=None):
-        self.corr_mat = self.correlation_create(x_set)
+        if self._features_mask is None:
+            self._features_mask = np.arange(x_set.shape[1])
+            
+        self._corr_mat = self._correlation_create(x_set)
         return self
 
-    def standard_generation(self, x_set, count_features): 
-        x_set = np.append(x_set, np.exp(x_set[:,:count_features]), axis=1)
-
-        x_time_set = x_set[:,:count_features]
-        x_time_set[x_time_set < -1] = -1 + EPS_LOG
-        x_set = np.append(x_set, np.log(x_time_set + 1), axis=1)
-
-        x_set = np.append(x_set, np.power(x_set[:,:count_features], 2), axis=1)
-        x_set = np.append(x_set, np.power(x_set[:,:count_features], 3), axis=1)
-
-        x_time_set = x_set[:,:count_features]
-        x_time_set[x_time_set < 0] = -np.power(-x_time_set[x_time_set < 0], 0.5)
-        x_time_set[x_time_set >= 0] = np.power(x_time_set[x_time_set >= 0], 0.5)
-        x_set = np.append(x_set, x_time_set, axis=1)
+    #Generating features using standard functions
+    def _standard_generation(self, x_set, features_mask=None):
+        if features_mask is None:
+            features_mask = self._features_mask
+        #exponent
+        x_set = np.concatenate([x_set, np.exp(x_set[:,features_mask])], axis=1)
+        #logarithm
+        x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] <= -1, 
+                                                np.log(EPS_LOG), 
+                                                np.log(x_set[:,features_mask] + 1, 
+                                                       where=x_set[:,features_mask] > -1))], axis=1)
+        #x^2
+        x_set = np.concatenate([x_set, np.power(x_set[:,features_mask], 2)], axis=1)
+        #x^3
+        x_set = np.concatenate([x_set, np.power(x_set[:,features_mask], 3)], axis=1)
+        #x^0.5 
+        x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] < 0, 
+                                                -np.power(-x_set[:,features_mask], 0.5, 
+                                                          where=x_set[:,features_mask] < 0), 
+                                                np.power(x_set[:,features_mask], 0.5, 
+                                                          where=x_set[:,features_mask] >= 0))], axis=1)
 
         return x_set
 
-    def correlation_generation(self, x_set):
-        for feat_1_ind in range(self.corr_mat.shape[0]):
-            for feat_2_ind in range(feat_1_ind, self.corr_mat[feat_1_ind].shape[0]):
-                if abs(self.corr_mat[feat_1_ind][feat_2_ind]) < THRESHOLD:
-                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] + x_set[:,feat_2_ind]).reshape(-1,1)], axis=1)
-                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] - x_set[:,feat_2_ind]).reshape(-1,1)], axis=1)
-                    x_set = np.concatenate([x_set, (x_set[:,feat_1_ind] * x_set[:,feat_2_ind]).reshape(-1,1)], axis=1)
+    #Generating features from two that have a correlation coefficient less than the threshold
+    def _correlation_generation(self, x_set, features_mask=None):
+        if features_mask is None:
+            features_mask = self._features_mask
+
+        for feat_ind in tqdm(range(self._corr_mat[:,features_mask][features_mask,:].shape[1])):
+            feature_filter = np.concatenate([np.full((feat_ind,), False), 
+                                             abs(self._corr_mat[:,features_mask][features_mask,:][feat_ind][feat_ind:]) < self.thr, 
+                                             np.full((x_set[:,features_mask].shape[1] - self._corr_mat[:,features_mask][features_mask,:].shape[1],), False)])
+            #x1 + x2
+            x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) + x_set[:,features_mask].T[feature_filter].T], axis=1)
+            #x1 - x2
+            x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) - x_set[:,features_mask].T[feature_filter].T], axis=1)
+            #x1 * x2
+            x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) * x_set[:,features_mask].T[feature_filter].T], axis=1)
 
         return x_set
 
     def transform(self, x_set):
-        x_set = self.standard_generation(x_set, x_set.shape[1])
-        x_set = self.correlation_generation(x_set)
+        x_set = self._standard_generation(x_set)
+        print(x_set.shape)
+        x_set = self._correlation_generation(x_set)
 
         return x_set
 
 
 if __name__ == '__main__':
-    x_set = np.array([
-        [1, 1, -1],
-        [0, 13, 0],
-        [2, 15, -2],
-        [7, 16, -7],
-        [7, 17, -7],
-        [7, 18, -7],
-        [10, 19, -10],
-        [7, 20, -7],
-        [90.2, 21, -90.2],
-        [90.2, 22, -90.2],
-        [142.1, 23, -142.1],
-        [7, 24, -7],
-        [7, 25, -7],
-        [7, 26, -7],
-        [7, 27, -7],
-        [7, 28, -7],
-        [7, 29, -7]
-    ])
-    x_set = normalize(x_set, axis= 0 , norm='l1')
-    # x_test_set = np.array([
-    #     [2, 1],
-    #     [2, 1],
-    #     [2, 1],
-    #     [2, 1],
-    #     [2, 1],
-    #     [1, 2],
-    #     [1, 2],
-    #     [1, 2],
-    #     [1, 2],
-    #     [1, 2],
-    #     [10, 3],
-    #     [11, 3],
-    #     [9, 3],
-    #     [11, 3],
-    #     [11, 3]
-    # ])
-    #print(mutual_info_regression(x_test_set[:,0].reshape(-1,1), x_test_set[:,1]),n_neighbors=5)
-    #print(x_test_set[:,1])
-    feat_gen = FeatureGenerationTransformer()
-    print(feat_gen.fit_transform(x_set).shape)
-    print(feat_gen.fit_transform(x_set))
+    X, y = make_classification(
+    n_samples=10000, n_features=100, n_informative=80, n_redundant=5,
+    random_state=42)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42)
+    scaler = StandardScaler()
+    
+
+    result = scaler.fit_transform(X_train)
+    feat_gen = FeatureGenerationTransformer(thr=0.01)
+    start_time = time.time()
+    result_2 = feat_gen.fit_transform(result)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print('Время генерации:', elapsed_time)
+    print(result_2.shape)
+    print(result_2)
