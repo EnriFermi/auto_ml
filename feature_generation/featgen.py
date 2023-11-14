@@ -65,7 +65,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         if features_mask is None:
             features_mask = self._features_mask
 
-        for feat_ind in tqdm(range(self._corr_mat[:,features_mask][features_mask,:].shape[1])):
+        for feat_ind in range(self._corr_mat[:,features_mask][features_mask,:].shape[1]):
             feature_filter = np.concatenate([np.full((feat_ind,), False), 
                                              abs(self._corr_mat[:,features_mask][features_mask,:][feat_ind][feat_ind:]) < self.thr, 
                                              np.full((x_set[:,features_mask].shape[1] - self._corr_mat[:,features_mask][features_mask,:].shape[1],), False)])
@@ -86,7 +86,6 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, x_set):
         x_set = self._standard_generation(x_set)
-        print(x_set.shape)
         x_set = self._correlation_generation(x_set)
 
         return x_set
