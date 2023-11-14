@@ -75,6 +75,13 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
             x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) - x_set[:,features_mask].T[feature_filter].T], axis=1)
             #x1 * x2
             x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) * x_set[:,features_mask].T[feature_filter].T], axis=1)
+            #x1 / x2
+            x_set = np.concatenate([x_set, np.divide(np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1), 
+                                                               np.count_nonzero(feature_filter), axis=1), 
+                                                     x_set[:,features_mask].T[feature_filter].T, 
+                                                     out=np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1), 
+                                                                   np.count_nonzero(feature_filter), axis=1),
+                                                     where=x_set[:,features_mask].T[feature_filter].T != 0)], axis=1)
 
         return x_set
 
@@ -88,7 +95,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
 
 if __name__ == '__main__':
     X, y = make_classification(
-    n_samples=10000, n_features=100, n_informative=80, n_redundant=5,
+    n_samples=100000, n_features=50, n_informative=40, n_redundant=5,
     random_state=42)
 
     X_train, X_test, y_train, y_test = train_test_split(
