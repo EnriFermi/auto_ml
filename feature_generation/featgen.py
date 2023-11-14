@@ -79,8 +79,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
             x_set = np.concatenate([x_set, np.divide(np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1), 
                                                                np.count_nonzero(feature_filter), axis=1), 
                                                      x_set[:,features_mask].T[feature_filter].T, 
-                                                     out=np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1), 
-                                                                   np.count_nonzero(feature_filter), axis=1),
+                                                     out=x_set[:,features_mask].T[feature_filter].T + 1 / EPS,
                                                      where=x_set[:,features_mask].T[feature_filter].T != 0)], axis=1)
 
         return x_set
