@@ -41,7 +41,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         if features_mask is None:
             features_mask = self._features_mask
         #exponent
-        x_set = np.concatenate([x_set, np.exp(x_set[:,features_mask])], axis=1)
+        x_set = np.concatenate([x_set, np.clip(np.exp(x_set[:,features_mask]), 0, 1e20)], axis=1)
         #logarithm
         x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] <= -1, 
                                                 np.log(EPS_LOG), 
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     random_state=42)
 
     X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=42)
+    X, y, test_size=0.2, random_state=42)
     scaler = StandardScaler()
     
 
