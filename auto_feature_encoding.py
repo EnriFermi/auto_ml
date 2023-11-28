@@ -13,19 +13,34 @@ class CircularEncoder(BaseEstimator, TransformerMixin):
         self.round_precision = round_precision
 
     def fit(self, x, y=None):
-        self._circular_max = np.max(np.abs(x), axis=0)
+        if isinstance(x, pd.DataFrame):
+            self._circular_max = np.max(np.abs(x.to_numpy()), axis=0)
+        else:
+            self._circular_max = np.max(np.abs(x), axis=0)
         self._circular_max = np.where(np.abs(self._circular_max) <= self._zero_precision, 1, self._circular_max)
-        return self            
+        return self        
 
     def transform(self, x):
         if self._circular_max is None or not self._circular_max.shape[0]:
             return x
         
         result = []
-        for num, col in enumerate(x.T):
-            result.append(np.sin((2 * np.pi * col) / self._circular_max[num]))
-            result.append(np.cos((2 * np.pi * col) / self._circular_max[num]))
-        return np.round(np.array(result).T, self.round_precision)
+
+        if isinstance(x, pd.DataFrame):
+            x_ndarray = x.to_numpy()
+            columns = []
+
+            for num, col in enumerate(x_ndarray.T):
+                result.append(np.sin((2 * np.pi * col) / self._circular_max[num]))
+                columns.append(f'sin_{x.columns[num]}')
+                result.append(np.cos((2 * np.pi * col) / self._circular_max[num]))
+                columns.append(f'cos_{x.columns[num]}')
+            return pd.DataFrame(np.round(np.array(result).T, self.round_precision), columns=columns)
+        else:
+            for num, col in enumerate(x.T):
+                result.append(np.sin((2 * np.pi * col) / self._circular_max[num]))
+                result.append(np.cos((2 * np.pi * col) / self._circular_max[num]))
+            return np.round(np.array(result).T, self.round_precision)
 
 
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
@@ -135,11 +150,27 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
 
 
 def main():
-    data = load_breast_cancer()
-    x = data.data
-    y = data.target
-    x = np.array([[round(col, 1) for col in row] for row in x])
+    pass
+    # data = load_breast_cancer()
+    # x = data.data
+    # y = data.target
+    # x = np.array([[round(col, 1) for col in row] for row in x])
 
+
+    # a = pd.DataFrame([[1, 2, 3], [4, 5, 6], [7, 8, 9]], columns=['a', 'b', 'c'])
+    # print(a.columns[0])
+    # a = a.T
+    # for ind in a.index:
+    #     a.loc[ind] = [1, 0, 0]
+    # a = a.T
+    # print(a)
+
+
+
+    # print('DATAFRAME:')
+    # print(a)
+
+    # print(a.iloc[1].to_numpy())
     # num_enc = NumericalEncoder(encoder='max_abs')
     # cat_enc = CategoricalEncoder()
 
