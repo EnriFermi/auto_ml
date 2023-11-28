@@ -61,8 +61,11 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
     def fit(self, x, y=None, **fit_params):
         self._categorical_columns_ind = self.get_categorical_columns_inds(x)
         if self._categorical_columns_ind.shape[0] == 0:
-            return self        
-        x_cat = x[:, self._categorical_columns_ind]
+            return self
+        if isinstance(x, pd.DataFrame):
+            x_cat = x.to_numpy()[:, self._categorical_columns_ind]
+        else:
+            x_cat = x[:, self._categorical_columns_ind]
 
         self._encoder.fit(pd.DataFrame(x_cat, dtype='category'), y, **fit_params)
         return self
@@ -71,21 +74,40 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
         if self._categorical_columns_ind is None or not self._categorical_columns_ind.shape[0]:
             return x
         
-        x_cat_transformed = x[:, self._categorical_columns_ind]
+        columns = None
+
+        if isinstance(x, pd.DataFrame): 
+            x_copy = x.to_numpy()
+            columns = x.columns.to_numpy()
+        else:
+            x_copy = x.copy()
+
+        x_cat_transformed = x_copy[:, self._categorical_columns_ind]
         x_cat_transformed = self._encoder.transform(pd.DataFrame(x_cat_transformed, dtype='category'))
         x_cat_transformed = x_cat_transformed.to_numpy()
 
-        x_copy = x.copy()
-
         if x_cat_transformed.shape[1] == self._categorical_columns_ind.shape[0]:
+            if columns is not None:
+                columns[self._categorical_columns_ind] = np.array(np.arange(self._categorical_columns_ind.shape[0]), dtype='str')
+
             x_copy[:, self._categorical_columns_ind] = x_cat_transformed
         elif self._drop:
+            if columns is not None:
+                columns = np.delete(columns, self._categorical_columns_ind)
+                columns = np.concatenate((columns, np.array(np.arange(self._categorical_columns_ind.shape[0]), dtype='str'))) 
+
             x_copy = np.delete(x, self._categorical_columns_ind, axis=1)
             x_copy = np.concatenate((x, x_cat_transformed), axis=1)
         else:
+            if columns is not None:
+                columns = np.concatenate((columns, np.array(np.arange(self._categorical_columns_ind.shape[0]), dtype='str')))
+
             x_copy = np.concatenate((x, x_cat_transformed), axis=1)
         
-        return x_copy
+        if columns is None:
+            return x_copy
+        else:
+            return pd.DataFrame(x_copy, columns=columns)
 
 
     def get_encoder_name(self):
@@ -95,6 +117,10 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
         return np.array(list(self._encoders.keys()))
 
     def get_categorical_columns_inds(self, data):
+        if isinstance(data, pd.DataFrame):
+            suitable_dtypes = ['category', 'object']
+            return data.dtypes[data.dtypes not in suitable_dtypes].index.to_numpy()
+        
         categorical_features = list()
 
         for num, col in enumerate(data.T):
@@ -119,8 +145,12 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
         self._numerical_columns_ind = self.get_numerical_columns_inds(x)
 
         if self._numerical_columns_ind.shape[0] == 0:
-            return self        
-        x_num = x[:, self._numerical_columns_ind]
+            return self     
+
+        if isinstance(x, pd.DataFrame):
+            x_num = x.to_numpy()[:, self._numerical_columns_ind]
+        else:
+            x_num = x[:, self._numerical_columns_ind]
 
         self._encoder.fit(x_num, y, **fit_params)
         return self
@@ -128,11 +158,26 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
     def transform(self, x):
         if self._numerical_columns_ind is None or not self._numerical_columns_ind.shape[0]:
             return x
-        x_num_transformed = self._encoder.transform(x[:, self._numerical_columns_ind])
-        x_copy = x.copy()
+        
+        columns = None
+
+        if isinstance(x, pd.DataFrame): 
+            x_copy = x.to_numpy()
+            columns = x.columns.to_numpy()
+        else:
+            x_copy = x.copy()
+            
+
+        if columns is not None:
+            columns[self._numerical_columns_ind] = np.array(np.arange(self._numerical_columns_ind.shape[0]), dtype='str')
+
+        x_num_transformed = self._encoder.transform(x_copy[:, self._numerical_columns_ind])
         x_copy[:, self._numerical_columns_ind] = x_num_transformed
         
-        return x_copy
+        if columns is None:
+            return x_copy
+        else:
+            return pd.DataFrame(x_copy, columns=columns)
 
     def get_encoder_name(self):
         return self._encoder_name
@@ -141,6 +186,10 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
         return np.array(list(self._encoders.keys()))
 
     def get_numerical_columns_inds(self, data):
+        if isinstance(data, pd.DataFrame):
+            wrong_dtypes = ['object', 'category', 'datetime64[ns, ]', 'period[]', 'Sparse', 'interval', 'string']
+            return data.dtypes[data.dtypes not in wrong_dtypes].index.to_numpy()
+        
         numerical_features = list()
 
         for num, col in enumerate(data.T):
@@ -150,46 +199,11 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
 
 
 def main():
-    pass
-    # data = load_breast_cancer()
-    # x = data.data
-    # y = data.target
-    # x = np.array([[round(col, 1) for col in row] for row in x])
-
-
-    # a = pd.DataFrame([[1, 2, 3], [4, 5, 6], [7, 8, 9]], columns=['a', 'b', 'c'])
-    # print(a.columns[0])
-    # a = a.T
-    # for ind in a.index:
-    #     a.loc[ind] = [1, 0, 0]
-    # a = a.T
-    # print(a)
-
-
-
-    # print('DATAFRAME:')
-    # print(a)
-
-    # print(a.iloc[1].to_numpy())
-    # num_enc = NumericalEncoder(encoder='max_abs')
-    # cat_enc = CategoricalEncoder()
-
-    # x = np.array([[0, 1, 2, 3], [1, 11, 0, 3], [23, 0, 5, 8]]).T
-    # circ = CircularEncoder()
-    # circ.fit(x)
-    # result = circ.transform(x)
-    # print(result)
-
-    # print(num_enc.get_numerical_columns_inds(x))
-    # print(cat_enc.get_categorical_columns_inds(x))
-
-    # print(x[:, 0])
-    # result = num_enc.fit_transform(x, y)
-    # result = cat_enc.fit_transform(result, y)
-    # print(result[:, 0])
-
-
-
+    data = load_breast_cancer()
+    x = data.data
+    y = data.target
+    concat = np.concatenate((x, y.reshape(-1, 1)), axis=1)
+    
 
 if __name__ == '__main__':
     main()
