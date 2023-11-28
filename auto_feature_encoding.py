@@ -7,9 +7,10 @@ import pandas as pd
 
 
 class CircularEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self):
+    def __init__(self, round_precision=4):
         self._circular_max = None
         self._zero_precision = 1e-6 
+        self.round_precision = round_precision
 
     def fit(self, x, y=None):
         self._circular_max = np.max(np.abs(x), axis=0)
@@ -24,7 +25,7 @@ class CircularEncoder(BaseEstimator, TransformerMixin):
         for num, col in enumerate(x.T):
             result.append(np.sin((2 * np.pi * col) / self._circular_max[num]))
             result.append(np.cos((2 * np.pi * col) / self._circular_max[num]))
-        return np.array(result).T
+        return np.round(np.array(result).T, self.round_precision)
 
 
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
@@ -137,15 +138,16 @@ def main():
     data = load_breast_cancer()
     x = data.data
     y = data.target
-
     x = np.array([[round(col, 1) for col in row] for row in x])
 
     # num_enc = NumericalEncoder(encoder='max_abs')
     # cat_enc = CategoricalEncoder()
-    circ = CircularEncoder()
-    circ.fit(x, y)
-    result = circ.transform(x)
-    print(result)
+
+    # x = np.array([[0, 1, 2, 3], [1, 11, 0, 3], [23, 0, 5, 8]]).T
+    # circ = CircularEncoder()
+    # circ.fit(x)
+    # result = circ.transform(x)
+    # print(result)
 
     # print(num_enc.get_numerical_columns_inds(x))
     # print(cat_enc.get_categorical_columns_inds(x))
