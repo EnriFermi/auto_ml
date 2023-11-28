@@ -20,15 +20,15 @@ THRESHOLD = 0.2
 class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, thr=THRESHOLD, features_mask=None):
         self.thr = thr
-        self._features_mask = features_mask
+        self.features_mask = features_mask
 
     #Construction of a matrix of correlation coefficients of features
     def _correlation_create(self, x_set):
         return np.corrcoef(x_set.T)
 
     def fit(self, x_set, y_set=None):
-        if self._features_mask is None:
-            self._features_mask = np.arange(x_set.shape[1])
+        if self.features_mask is None:
+            self.features_mask = np.arange(x_set.shape[1])
 
         self._corr_mat = self._correlation_create(x_set)
         return self
@@ -36,7 +36,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     #Generating features using standard functions
     def _standard_generation(self, x_set, features_mask=None):
         if features_mask is None:
-            features_mask = self._features_mask
+            features_mask = self.features_mask
         #exponent
         x_set = np.concatenate([x_set, np.clip(np.exp(x_set[:,features_mask]), 0, 1e20)], axis=1)
         #logarithm
@@ -60,26 +60,43 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     #Generating features from two that have a correlation coefficient less than the threshold
     def _correlation_generation(self, x_set, features_mask=None):
         if features_mask is None:
-            features_mask = self._features_mask
+            features_mask = self.features_mask
 
-        for feat_ind in range(self._corr_mat[:,features_mask][features_mask,:].shape[1]):
-            feature_filter = np.concatenate([np.full((feat_ind,), False),
-                                             abs(self._corr_mat[:,features_mask][features_mask,:][feat_ind][feat_ind:]) < self.thr,
-                                             np.full((x_set[:,features_mask].shape[1] - self._corr_mat[:,features_mask][features_mask,:].shape[1],), False)])
-            #x1 + x2
-            x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) + x_set[:,features_mask].T[feature_filter].T], axis=1)
-            #x1 - x2
-            x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) - x_set[:,features_mask].T[feature_filter].T], axis=1)
-            #x1 * x2
-            x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) * x_set[:,features_mask].T[feature_filter].T], axis=1)
-            #x1 / x2
-            x_set = np.concatenate([x_set, np.divide(np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1),
-                                                               np.count_nonzero(feature_filter), axis=1),
-                                                     x_set[:,features_mask].T[feature_filter].T,
-                                                     out=x_set[:,features_mask].T[feature_filter].T + 1 / EPS,
-                                                     where=x_set[:,features_mask].T[feature_filter].T != 0)], axis=1)
+        pairs_indxs_mat = np.array([[[i, j] for j in range(self._corr_mat.shape[1])] for i in range(self._corr_mat.shape[0])])
+        pairs_indxs_mat = pairs_indxs_mat[abs(self._corr_mat) < self.thr]
+        pairs_indxs_mat = pairs_indxs_mat[pairs_indxs_mat[:, 0] > pairs_indxs_mat[:, 1]]
+
+        #x1 + x2
+        x_set = np.concatenate([x_set, np.sum(x_set[:,features_mask].T[pairs_indxs_mat], axis=1).T], axis=1)
+        #x1 * x2
+        x_set = np.concatenate([x_set, np.prod(x_set[:,features_mask].T[pairs_indxs_mat], axis=1).T], axis=1)
+        #x1 - x2, x2 - x1
+        x_set = np.concatenate([x_set, (x_set[:,features_mask].T[pairs_indxs_mat] - x_set[:,features_mask].T[pairs_indxs_mat][:,::-1]).reshape(pairs_indxs_mat.shape[0] * 2, 
+                                                                                                                                   x_set[:,features_mask].shape[0]).T], axis=1)
+        #x1 / x2, x2 / x1
+        x_set = np.concatenate([x_set, (x_set[:,features_mask].T[pairs_indxs_mat] / (x_set[:,features_mask].T[pairs_indxs_mat][:,::-1] + EPS)).reshape(pairs_indxs_mat.shape[0] * 2, 
+                                                                                                                                           x_set[:,features_mask].shape[0]).T], axis=1)
 
         return x_set
+
+        # for feat_ind in range(self._corr_mat[:,features_mask][features_mask,:].shape[1]):
+        #     feature_filter = np.concatenate([np.full((feat_ind,), False),
+        #                                      abs(self._corr_mat[:,features_mask][features_mask,:][feat_ind][feat_ind:]) < self.thr,
+        #                                      np.full((x_set[:,features_mask].shape[1] - self._corr_mat[:,features_mask][features_mask,:].shape[1],), False)])
+        #     #x1 + x2
+        #     x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) + x_set[:,features_mask].T[feature_filter].T], axis=1)
+        #     # #x1 - x2
+        #     x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) - x_set[:,features_mask].T[feature_filter].T], axis=1)
+        #     #x1 * x2
+        #     x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) * x_set[:,features_mask].T[feature_filter].T], axis=1)
+        #     # #x1 / x2
+        #     x_set = np.concatenate([x_set, np.divide(np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1),
+        #                                                        np.count_nonzero(feature_filter), axis=1),
+        #                                              x_set[:,features_mask].T[feature_filter].T,
+        #                                              out=x_set[:,features_mask].T[feature_filter].T + 1 / EPS,
+        #                                              where=x_set[:,features_mask].T[feature_filter].T != 0)], axis=1)
+
+        # return x_set
 
     def transform(self, x_set):
         x_set = self._standard_generation(x_set)
