@@ -21,18 +21,15 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, thr=THRESHOLD, features_mask=None):
         self.thr = thr
         self._features_mask = features_mask
-    
+
     #Construction of a matrix of correlation coefficients of features
     def _correlation_create(self, x_set):
-        cov_mat = empirical_covariance(x_set)
-        std_arr = np.std(x_set, axis=0).reshape((1,-1))
-        std_mat = std_arr.T @ std_arr
-        return cov_mat / (std_mat + EPS)
+        return np.corrcoef(x_set.T)
 
     def fit(self, x_set, y_set=None):
         if self._features_mask is None:
             self._features_mask = np.arange(x_set.shape[1])
-            
+
         self._corr_mat = self._correlation_create(x_set)
         return self
 
@@ -43,19 +40,19 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         #exponent
         x_set = np.concatenate([x_set, np.clip(np.exp(x_set[:,features_mask]), 0, 1e20)], axis=1)
         #logarithm
-        x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] <= -1, 
-                                                np.log(EPS_LOG), 
-                                                np.log(x_set[:,features_mask] + 1, 
+        x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] <= -1,
+                                                np.log(EPS_LOG),
+                                                np.log(x_set[:,features_mask] + 1,
                                                        where=x_set[:,features_mask] > -1))], axis=1)
         #x^2
         x_set = np.concatenate([x_set, np.power(x_set[:,features_mask], 2)], axis=1)
         #x^3
         x_set = np.concatenate([x_set, np.power(x_set[:,features_mask], 3)], axis=1)
-        #x^0.5 
-        x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] < 0, 
-                                                -np.power(-x_set[:,features_mask], 0.5, 
-                                                          where=x_set[:,features_mask] < 0), 
-                                                np.power(x_set[:,features_mask], 0.5, 
+        #x^0.5
+        x_set = np.concatenate([x_set, np.where(x_set[:,features_mask] < 0,
+                                                -np.power(-x_set[:,features_mask], 0.5,
+                                                          where=x_set[:,features_mask] < 0),
+                                                np.power(x_set[:,features_mask], 0.5,
                                                           where=x_set[:,features_mask] >= 0))], axis=1)
 
         return x_set
@@ -66,8 +63,8 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
             features_mask = self._features_mask
 
         for feat_ind in range(self._corr_mat[:,features_mask][features_mask,:].shape[1]):
-            feature_filter = np.concatenate([np.full((feat_ind,), False), 
-                                             abs(self._corr_mat[:,features_mask][features_mask,:][feat_ind][feat_ind:]) < self.thr, 
+            feature_filter = np.concatenate([np.full((feat_ind,), False),
+                                             abs(self._corr_mat[:,features_mask][features_mask,:][feat_ind][feat_ind:]) < self.thr,
                                              np.full((x_set[:,features_mask].shape[1] - self._corr_mat[:,features_mask][features_mask,:].shape[1],), False)])
             #x1 + x2
             x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) + x_set[:,features_mask].T[feature_filter].T], axis=1)
@@ -76,9 +73,9 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
             #x1 * x2
             x_set = np.concatenate([x_set, x_set[:,features_mask].T[0].reshape(-1, 1) * x_set[:,features_mask].T[feature_filter].T], axis=1)
             #x1 / x2
-            x_set = np.concatenate([x_set, np.divide(np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1), 
-                                                               np.count_nonzero(feature_filter), axis=1), 
-                                                     x_set[:,features_mask].T[feature_filter].T, 
+            x_set = np.concatenate([x_set, np.divide(np.repeat(x_set[:,features_mask].T[0].reshape(-1, 1),
+                                                               np.count_nonzero(feature_filter), axis=1),
+                                                     x_set[:,features_mask].T[feature_filter].T,
                                                      out=x_set[:,features_mask].T[feature_filter].T + 1 / EPS,
                                                      where=x_set[:,features_mask].T[feature_filter].T != 0)], axis=1)
 
