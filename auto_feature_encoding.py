@@ -1,9 +1,30 @@
 from sklearn.datasets import load_breast_cancer
-from sklearn.preprocessing import MinMaxScaler
+import sklearn.preprocessing as skpr
 from sklearn.base import BaseEstimator, TransformerMixin
 import category_encoders as ce
 import numpy as np
 import pandas as pd
+
+
+class CircularEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        self._circular_max = None
+        self._zero_precision = 1e-6 
+
+    def fit(self, x, y=None):
+        self._circular_max = np.max(np.abs(x), axis=0)
+        self._circular_max = np.where(np.abs(self._circular_max) <= self._zero_precision, 1, self._circular_max)
+        return self            
+
+    def transform(self, x):
+        if self._circular_max is None or not self._circular_max.shape[0]:
+            return x
+        
+        result = []
+        for num, col in enumerate(x.T):
+            result.append(np.sin((2 * np.pi * col) / self._circular_max[num]))
+            result.append(np.cos((2 * np.pi * col) / self._circular_max[num]))
+        return np.array(result).T
 
 
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
@@ -67,57 +88,49 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
     
 
 class NumericalEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self):
-        pass
+    def __init__(self, encoder='standard', numerical_rate=0.2, **encoder_params):
+        self._encoders = {'standard': skpr.StandardScaler, 
+                          'min_max': skpr.MinMaxScaler, 
+                          'normalizer': skpr.Normalizer,
+                          'robust': skpr.RobustScaler,
+                          'max_abs': skpr.MaxAbsScaler}
+        self._encoder_name = encoder
+        self._encoder = self._encoders[encoder](**encoder_params)
+        self._numerical_columns_ind = None
+        self.numerical_rate = numerical_rate
 
     def fit(self, x, y=None, **fit_params):
-        pass
+        self._numerical_columns_ind = self.get_numerical_columns_inds(x)
 
-    def transform(self, x):
-        pass
+        if self._numerical_columns_ind.shape[0] == 0:
+            return self        
+        x_num = x[:, self._numerical_columns_ind]
 
-
-class CustomNormalizer(BaseEstimator, TransformerMixin):
-    def __init__(self, feature_rate=0.2):
-        self._normalizers = {"minmax": MinMaxScaler}
-        self.feature_rate = feature_rate
-        self.num_features_inds = None
-        self.normalizer = None
-
-
-    def fit(self, x, y=None, **fit_params):
-        self.num_features_inds = self._get_numerical_inds(x)
-
-        if "normalize_type" in fit_params.keys():
-            self.normalizer = self._normalizers[fit_params["normalize_type"]]()
-            del fit_params["normalize_type"]
-        else:
-            self.normalizer = MinMaxScaler()
-
-        if len(self.num_features_inds) != 0:
-            self.normalizer = self.normalizer.fit(x[:, self.num_features_inds], y, **fit_params)
-        else:
-            self.normalizer = None
+        self._encoder.fit(x_num, y, **fit_params)
         return self
 
     def transform(self, x):
-        if self.normalizer is None:
+        if self._numerical_columns_ind is None or not self._numerical_columns_ind.shape[0]:
             return x
+        x_num_transformed = self._encoder.transform(x[:, self._numerical_columns_ind])
+        x_copy = x.copy()
+        x_copy[:, self._numerical_columns_ind] = x_num_transformed
+        
+        return x_copy
 
-        normalized = self.normalizer.transform(x[:, self.num_features_inds])
-        x[:, self.num_features_inds] = normalized
-        return x
+    def get_encoder_name(self):
+        return self._encoder_name
 
-    def get_normalaizer_types(self):
-        return list(self._normalizers.keys())
+    def get_available_encoders(self):
+        return np.array(list(self._encoders.keys()))
 
-    def _get_numerical_inds(self, data):
-        numerical_features_inds = list()
+    def get_numerical_columns_inds(self, data):
+        numerical_features = list()
 
         for num, col in enumerate(data.T):
-            if np.unique(col).shape[0] >= data.shape[0] * self.feature_rate:
-                numerical_features_inds.append(num)
-        return numerical_features_inds
+            if np.unique(col).shape[0] >= data.shape[0] * self.numerical_rate:
+                numerical_features.append(num)
+        return np.array(numerical_features)
 
 
 def main():
@@ -127,8 +140,22 @@ def main():
 
     x = np.array([[round(col, 1) for col in row] for row in x])
 
-    cat_enc = CategoricalEncoder(encoder='target')
-    result = cat_enc.fit_transform(x, y)
+    # num_enc = NumericalEncoder(encoder='max_abs')
+    # cat_enc = CategoricalEncoder()
+    circ = CircularEncoder()
+    circ.fit(x, y)
+    result = circ.transform(x)
+    print(result)
+
+    # print(num_enc.get_numerical_columns_inds(x))
+    # print(cat_enc.get_categorical_columns_inds(x))
+
+    # print(x[:, 0])
+    # result = num_enc.fit_transform(x, y)
+    # result = cat_enc.fit_transform(result, y)
+    # print(result[:, 0])
+
+
 
 
 if __name__ == '__main__':
