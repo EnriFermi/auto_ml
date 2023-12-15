@@ -57,28 +57,28 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
 
         if features_mask.size:
             #exponent
-            self.desc_dict['exp'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
+            self.desc_dict['s_exp'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
             X = np.concatenate([X, np.exp(np.clip(X[:,features_mask], -750, 700))], axis=1)
 
             #x^2
-            self.desc_dict['^2'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
+            self.desc_dict['s_^2'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
             X = np.concatenate([X, np.power(X[:,features_mask], 2)], axis=1)
 
             #x^3
-            self.desc_dict['^3'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
+            self.desc_dict['s_^3'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
             X = np.concatenate([X, np.power(X[:,features_mask], 3)], axis=1)
 
 
         if important_features.size:
             #logarithm
-            self.desc_dict['log'] = [important_features, np.arange(X.shape[1], X.shape[1] + important_features.shape[0])]
+            self.desc_dict['s_log'] = [important_features, np.arange(X.shape[1], X.shape[1] + important_features.shape[0])]
             X = np.concatenate([X, np.where(X[:,important_features] <= -1,
                                                     np.log(EPS_LOG),
                                                     np.log(X[:,important_features] + 1,
                                                           where=X[:,important_features] > -1))], axis=1)
 
             #x^0.5
-            self.desc_dict['^0.5'] = [important_features, np.arange(X.shape[1], X.shape[1] + important_features.shape[0])]
+            self.desc_dict['s_^0.5'] = [important_features, np.arange(X.shape[1], X.shape[1] + important_features.shape[0])]
             X = np.concatenate([X, np.where(X[:,important_features] < 0,
                                                     -np.power(-X[:,important_features], 0.5,
                                                               where=X[:,important_features] < 0),
@@ -95,11 +95,11 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         pairs_indxs_mat = np.array(list(combinations(range(self._corr_mat.shape[0]), 2)))
 
         #x1 * x2
-        self.desc_dict['*'] = [important_features[pairs_indxs_mat], np.arange(X.shape[1], X.shape[1] + pairs_indxs_mat.shape[0])]
+        self.desc_dict['p_*'] = [important_features[pairs_indxs_mat], np.arange(X.shape[1], X.shape[1] + pairs_indxs_mat.shape[0])]
         X = np.concatenate([X, np.prod(X_features.T[pairs_indxs_mat], axis=1).T], axis=1)
 
         #x1 / x2, x2 / x1
-        self.desc_dict['/'] = [np.hstack([important_features[pairs_indxs_mat], important_features[pairs_indxs_mat][:,::-1]]).reshape(-1, 2),
+        self.desc_dict['p_/'] = [np.hstack([important_features[pairs_indxs_mat], important_features[pairs_indxs_mat][:,::-1]]).reshape(-1, 2),
                                np.arange(X.shape[1], X.shape[1] + 2 * pairs_indxs_mat.shape[0])]
         X = np.concatenate([X, (X_features.T[pairs_indxs_mat] / (X_features.T[pairs_indxs_mat][:,::-1] + EPS)).reshape(pairs_indxs_mat.shape[0] * 2,
                                                                                                                                            X_features.shape[0]).T], axis=1)
@@ -110,11 +110,11 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
 
         if pairs_indxs_mat.size:
             #x1 + x2
-            self.desc_dict['+'] = [important_features[pairs_indxs_mat], np.arange(X.shape[1], X.shape[1] + pairs_indxs_mat.shape[0])]
+            self.desc_dict['p_+'] = [important_features[pairs_indxs_mat], np.arange(X.shape[1], X.shape[1] + pairs_indxs_mat.shape[0])]
             X = np.concatenate([X, np.sum(X_features.T[pairs_indxs_mat], axis=1).T], axis=1)
 
             #x1 - x2, x2 - x1
-            self.desc_dict['-'] = [np.hstack([important_features[pairs_indxs_mat], important_features[pairs_indxs_mat][:,::-1]]).reshape(-1, 2),
+            self.desc_dict['p_-'] = [np.hstack([important_features[pairs_indxs_mat], important_features[pairs_indxs_mat][:,::-1]]).reshape(-1, 2),
                                    np.arange(X.shape[1], X.shape[1] + 2 * pairs_indxs_mat.shape[0])]
             X = np.concatenate([X, (X_features.T[pairs_indxs_mat] - X_features.T[pairs_indxs_mat][:,::-1]).reshape(pairs_indxs_mat.shape[0] * 2,
                                                                                                                                       X_features.shape[0]).T], axis=1)
