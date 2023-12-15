@@ -58,7 +58,7 @@ class FeatureGenerationTransformer(BaseEstimator, TransformerMixin):
         if features_mask.size:
             #exponent
             self.desc_dict['exp'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
-            X = np.concatenate([X, np.clip(np.exp(X[:,features_mask]), 0, 1e20)], axis=1)
+            X = np.concatenate([X, np.exp(np.clip(X[:,features_mask], -750, 700))], axis=1)
 
             #x^2
             self.desc_dict['^2'] = [features_mask, np.arange(X.shape[1], X.shape[1] + features_mask.shape[0])]
@@ -138,7 +138,6 @@ if __name__ == '__main__':
     X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42)
     scaler = StandardScaler()
-
 
     result = scaler.fit_transform(X_train)
     feat_gen = FeatureGenerationTransformer(thr=0.01,  important_features=[1, 2, 3, 4, 5, 6, 7, 8, 9, 92])
