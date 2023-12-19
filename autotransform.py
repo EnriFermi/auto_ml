@@ -1,5 +1,6 @@
-class Transformer(BaseEstimator, TransformerMixin):
-    def __init__(self, **kwargs):
+class ValidTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, task_type, **kwargs):
+        self.task_type = task_type
         self.kwargs = kwargs
         if 'work_time' in kwargs.keys():
             self.work_time = kwargs['work_time']
@@ -22,32 +23,14 @@ class Transformer(BaseEstimator, TransformerMixin):
         else:
             self.encoder = CategoricalEncoder()
         # self.encoder = preprocessing.StandardScaler() # TODO add normalization after generation
-        if 'generator' in self.kwargs.keys():
-            self.generator = FeatureGenerationTransformer(
-                **self.kwargs['generator'])
+        if 'processor' in self.kwargs.keys():
+            self.trans = FeatProc(**self.kwargs['processor'])
         else:
-            self.generator = FeatureGenerationTransformer()
-        if 'selector' in self.kwargs.keys():
-            self.selector = FeatureSelectionTransformer(
-                k=f_dim, **self.kwargs['selector'])
-        else:
-            self.selector = FeatureSelectionTransformer(k=f_dim)
+            self.trans = FeatProc(self.task_type, 2)
         self.encoder.fit(X, y)
-        X_trrrrrrr, X_val, y_trrrrrrr, y_val = train_test_split(
-            X, y, test_size=self.val_size, random_state=self.random_state)
-        # Cross validation (2 blocks)
-        self.need_to_generate = 1.15*1e-7 * obj_count * f_dim**2 <= self.work_time
-        if self.need_to_generate:
-            X_enc = self.encoder.transform(X_val)
-            self.generator.fit(X_enc, y_val)
-            X_tte = self.generator.transform(X_enc)
-            self.selector.fit((X_tte), y_val)
-        return X_trrrrrrr, y_trrrrrrr
+        self.trans.fit(X, y)
 
     def transform(self, X, y=None):
         # Perform arbitary transformation
         X = self.encoder.transform(X)
-        if self.need_to_generate:
-            X = self.generator.transform(X)
-            X = self.selector.transform(X)
-        return X
+        return self.trans.transform(X)
