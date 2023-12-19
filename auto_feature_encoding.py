@@ -65,12 +65,15 @@ class CircularEncoder(BaseEstimator, TransformerMixin):
 
 
 class DateTimeEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, datetime_inds=None):
+    def __init__(self, datetime_inds=None, drop=True, days_unique=0, months_unique=0):
         if datetime_inds is not None and not isinstance(datetime_inds, np.ndarray):
             raise TypeError('datetime_inds should be a np.ndarray')
-        
+
         self._datetime_columns_ind = datetime_inds
 
+        self._drop = drop
+        self.days_unique = days_unique
+        self.months_unique = months_unique
         self.circular_enc_12 = CircularEncoder(limit=12)
         self.circular_enc_30 = CircularEncoder(limit=30)
         self.circular_enc_60 = CircularEncoder(limit=60)
@@ -79,33 +82,89 @@ class DateTimeEncoder(BaseEstimator, TransformerMixin):
         if self._datetime_columns_ind is None:
             self._datetime_columns_ind = self.get_datetime_columns_inds(X)
 
-        if self._datetime_columns_ind.shape[0] == 0:
-            return self
+        return self
 
-    def transform_column(self, column):
+    def transform(self, X):
+        if self._datetime_columns_ind is None or not self._datetime_columns_ind.shape[0]:
+            return X
+
+        columns = None
+
+        if isinstance(X, pd.DataFrame):
+            X_copy = X.to_numpy()
+            columns = X.columns.to_numpy()
+        else:
+            X_copy = X.copy()
+
+        datetime_inds = self._datetime_columns_ind.copy()
+        for num, datetime_ind in enumerate(datetime_inds):
+            if columns is not None:
+                transformed = self._transform_column(pd.Series(X_copy[:, datetime_ind], name=columns[datetime_ind]))
+                extra_names = transformed.columns
+                transformed = transformed.to_numpy()
+                columns = np.concatenate((columns[:datetime_ind + 1], extra_names, columns[datetime_ind + 1:]))
+            else:
+                transformed = self._transform_column(X_copy[:, datetime_ind])
+
+            X_copy = np.concatenate((X_copy[:, :datetime_ind + 1], transformed, X_copy[:, datetime_ind + 1:]), axis=1)
+
+            datetime_inds[num + 1:] += transformed.shape[1]
+
+            if self._drop:
+                if columns is not None:
+                    columns = np.delete(columns, [datetime_ind])
+                X_copy = np.delete(X_copy, [datetime_ind], axis=1)
+                datetime_inds[num + 1:] -= 1
+
+        if columns is None:
+            return X_copy
+        else:
+            return pd.DataFrame(X_copy, columns=columns)
+
+    def _transform_column(self, column):
         if not isinstance(column, pd.Series):
             col = pd.Series(column)
         else:
             col = column.copy()
 
-        new_cols = np.array([col.dt.year.to_numpy()]).T
-        new_cols = np.concatenate((new_cols, self.circular_enc_12.fit_transform(col.dt.month.to_numpy())), axis=1)
-        new_cols = np.concatenate((new_cols, self.circular_enc_30.fit_transform(col.dt.day.to_numpy())), axis=1)
+        col = pd.to_datetime(col)
+        col = col.astype(int)
+
+        min_seconds = col.min()
+        col = col.apply(lambda val: val - min_seconds)
+        col = pd.to_datetime(col)
+
+        unique_days_count = np.unique(col.dt.day.to_numpy()).shape[0]
+        unique_months_count = np.unique(col.dt.month.to_numpy()).shape[0]
+
+        # Нормализуем
+        normalizer = skpr.Normalizer()
+        new_cols = normalizer.fit_transform(self.circular_enc_60.fit_transform(col.dt.second.to_numpy()))
+
+        # Вариант без нормализации
+        # new_cols = self.circular_enc_60.fit_transform(col.dt.second.to_numpy())
+
         new_cols = np.concatenate((new_cols, self.circular_enc_60.fit_transform(col.dt.hour.to_numpy())), axis=1)
-        new_cols = np.concatenate((new_cols, self.circular_enc_60.fit_transform(col.dt.minute.to_numpy())), axis=1)
-        new_cols = np.concatenate((new_cols, self.circular_enc_60.fit_transform(col.dt.second.to_numpy())), axis=1)
+
+        columns_count = 4  # По два столбца на признак секунд и часа
+
+        if unique_days_count > self.days_unique:
+            new_cols = np.concatenate((new_cols, self.circular_enc_30.fit_transform(col.dt.day.to_numpy())), axis=1)
+            columns_count += 2
+
+        if unique_months_count > self.months_unique:
+            new_cols = np.concatenate((new_cols, self.circular_enc_12.fit_transform(col.dt.month.to_numpy())), axis=1)
+            columns_count += 2
 
         if isinstance(column, pd.Series):
-            columns = np.array([f'{column.name}_year',
-                                f'{column.name}_month_sin', f'{column.name}_month_cos',
-                                f'{column.name}_day_sin', f'{column.name}_day_cos',
+            columns = np.array([f'{column.name}_second_sin', f'{column.name}_second_cos',
                                 f'{column.name}_hour_sin', f'{column.name}_hour_cos',
-                                f'{column.name}_minute_sin', f'{column.name}_minute_cos',
-                                f'{column.name}_second_sin', f'{column.name}_second_cos'])
-            new_cols = pd.DataFrame(new_cols, columns=columns)
+                                f'{column.name}_day_sin', f'{column.name}_day_cos',
+                                f'{column.name}_month_sin', f'{column.name}_month_cos'])
+            new_cols = pd.DataFrame(new_cols, columns=columns[:columns_count])
 
         return new_cols
-    
+
     def get_datetime_columns_inds(self, data):
         datetime_inds = []
         for num, col in enumerate(data.T):
@@ -116,14 +175,14 @@ class DateTimeEncoder(BaseEstimator, TransformerMixin):
 
     def _is_datetime_string(self, s):
         try:
-            np.datetime64(s)
+            pd.to_datetime(s)
             return True
         except ValueError:
-            return False        
+            return False
 
 
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, encoder='target_loo', category_rate=0.1, drop=True, cat_inds=None, **encoder_params):
+    def __init__(self, encoder='target_loo', category_rate=0.1, df_rated=False, drop=True, cat_inds=None, **encoder_params):
         if cat_inds is not None and not isinstance(cat_inds, np.ndarray):
             raise TypeError('cat_inds should be a np.ndarray')
 
@@ -132,6 +191,7 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
                           'hashing': ce.HashingEncoder,
                           'binary': ce.BinaryEncoder}
         self._encoder_name = encoder
+        self.df_rated = df_rated
         self._encoder_params = encoder_params
         self._encoder = self._encoders[encoder](**encoder_params)
         self._drop = drop
@@ -141,7 +201,7 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None, **fit_params):
         if self._categorical_columns_ind is None:
-            self._categorical_columns_ind = self.get_categorical_columns_inds(X)
+            self._categorical_columns_ind = self.get_categorical_columns_inds(X, self.df_rated)
         if self._categorical_columns_ind.shape[0] == 0:
             return self
         if isinstance(X, pd.DataFrame):
@@ -200,13 +260,30 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
     def get_available_encoders(self):
         return np.array(list(self._encoders.keys()))
 
-    def get_categorical_columns_inds(self, data):
+    def get_categorical_columns_inds(self, data, df_rated=False):
         if isinstance(data, pd.DataFrame):
-            suitable_dtypes = ['category', 'object']
-            columns = data.select_dtypes(include=suitable_dtypes).columns.to_numpy()
-            all_columns = data.columns.to_numpy()
-            return np.array([np.where(all_columns == col)[0] for col in columns]).reshape(-1)
+            if df_rated:
+                return self._get_cat_rated_inds(data)
+            else:
+                suitable_dtypes = ['category', 'object']
+                columns = data.select_dtypes(include=suitable_dtypes).columns.to_numpy()
+                all_columns = data.columns.to_numpy()
+                return np.array([np.where(all_columns == col)[0] for col in columns]).reshape(-1)
+        
+        else:
+            return self.get_np_cat_inds(data)
+    
+    def _get_cat_rated_inds(self, df):
+        categorical_features = list()
 
+        for num, series in enumerate(df.items()):
+            series = series[1]
+            if series.dtype.type in [np.object_, np.str_] or np.unique(series.to_numpy()).shape[0] < series.shape[0] * self.category_rate:
+                categorical_features.append(num)
+
+        return np.array(categorical_features)
+
+    def _get_np_cat_inds(self, data):
         categorical_features = list()
 
         for num, col in enumerate(data.T):
@@ -216,7 +293,7 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
 
 
 class NumericalEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, encoder='standard', numerical_rate=0.1, num_inds=None, **encoder_params):
+    def __init__(self, encoder='standard', numerical_rate=0.1, df_rated=False, num_inds=None, **encoder_params):
         if num_inds is not None and not isinstance(num_inds, np.ndarray):
             raise TypeError('num_inds should be a np.ndarray')
         self._encoders = {'standard': skpr.StandardScaler,
@@ -224,13 +301,14 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
                           'normalizer': skpr.Normalizer,
                           'max_abs': skpr.MaxAbsScaler}
         self._encoder_name = encoder
+        self.df_rated = df_rated
         self._encoder = self._encoders[encoder](**encoder_params)
         self._numerical_columns_ind = num_inds
         self.numerical_rate = numerical_rate
 
     def fit(self, X, y=None, **fit_params):
         if self._numerical_columns_ind is None:
-            self._numerical_columns_ind = self.get_numerical_columns_inds(X)
+            self._numerical_columns_ind = self.get_numerical_columns_inds(X, self.df_rated)
 
         if self._numerical_columns_ind.shape[0] == 0:
             return self
@@ -272,35 +350,48 @@ class NumericalEncoder(BaseEstimator, TransformerMixin):
     def get_available_encoders(self):
         return np.array(list(self._encoders.keys()))
 
-    def get_numerical_columns_inds(self, data):
+    def get_numerical_columns_inds(self, data, df_rated=False):
         if isinstance(data, pd.DataFrame):
-            wrong_dtypes = ['object', 'category', 'datetime64', 'timedelta']
-            columns = data.select_dtypes(exclude=wrong_dtypes).columns.to_numpy()
-            all_columns = data.columns.to_numpy()
-            return np.array([np.where(all_columns == col)[0] for col in columns]).reshape(-1)
+            if df_rated: 
+                return self._get_num_rated_inds(data)
+            else:
+                wrong_dtypes = ['object', 'category', 'datetime64', 'timedelta']
+                columns = data.select_dtypes(exclude=wrong_dtypes).columns.to_numpy()
+                all_columns = data.columns.to_numpy()
+                return np.array([np.where(all_columns == col)[0] for col in columns]).reshape(-1)
+        else:
+            return self._get_np_num_inds(data)
 
+    def _get_num_rated_inds(self, df):
         numerical_features = list()
+        
+        for num, series in enumerate(df.items()):
+            series = series[1]
+            if series.dtype.type not in [np.object_, np.str_]:
+                if np.unique(series.to_numpy()).shape[0] >= series.shape[0] * self.numerical_rate:
+                    numerical_features.append(num)
 
-        for num, col in enumerate(data.T):
-            if np.unique(col).shape[0] >= data.shape[0] * self.numerical_rate:
-                numerical_features.append(num)
+        return np.array(numerical_features)
+
+    def _get_np_num_inds(self, data):
+        numerical_features = list()
+        
+        if data.dtype.type not in [np.object_, np.str_]:
+            for num, col in enumerate(data.T):
+                if np.unique(col).shape[0] >= data.shape[0] * self.numerical_rate:
+                    numerical_features.append(num)
         return np.array(numerical_features)
 
 
 class BasicEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, category_params, numerical_params):
-        # category_params - dict
-        # numerical_params - dict
+        pass
 
-        self.datetime_enc = DateTimeEncoder()
-        self.category_enc = CategoricalEncoder(**category_params)
-        self.numerical_enc = NumericalEncoder(**numerical_params)
-    
     def fit(self, X, y, **fit_params):
         pass
 
     def transformed(self, X):
         pass
-    
+
     def get_columns_classification(self):
         pass
